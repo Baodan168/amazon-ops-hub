@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon 运营总台</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --sidebar: #1a1a2e;
+    --primary: #2563eb;
+    --text: #1a1a2e;
+    --ease: cubic-bezier(.25,.1,.25,1);
+    --duration: .2s;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    height: 56px;
+    padding: 0 20px;
+    background: var(--sidebar);
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .brand { white-space: nowrap; }
+  .brand b { display: block; font-size: 15px; font-weight: 700; letter-spacing: .3px; }
+  .brand small {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,.42);
+  }
+  .tabs { display: flex; gap: 8px; flex: 1; min-width: 0; }
+  .tab {
+    appearance: none;
+    border: 1px solid rgba(255,255,255,.14);
+    background: transparent;
+    color: rgba(255,255,255,.62);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 7px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease), border-color var(--duration) var(--ease);
+  }
+  .tab:hover { background: rgba(255,255,255,.09); color: #fff; }
+  .tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .tab .flag { font-size: 15px; line-height: 1; }
+  .open-btn {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.14);
+    color: rgba(255,255,255,.62);
+    text-decoration: none;
+    font-size: 14px;
+    transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+  }
+  .open-btn:hover { background: rgba(255,255,255,.09); color: #fff; }
+  .stage { flex: 1; position: relative; background: #fff; }
+  .stage iframe { width: 100%; height: 100%; border: none; display: block; }
+  .loading {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    transition: opacity .25s var(--ease);
+  }
+  .loading.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #e2e5ea;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 768px) {
+    .topbar { gap: 12px; padding: 0 12px; }
+    .brand b { font-size: 13px; }
+    .tab { padding: 6px 13px; font-size: 12px; }
+    .tab .name { display: none; }
+    .open-btn { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><b>Amazon 运营总台</b><small>Ops Hub</small></div>
+    <nav class="tabs" id="tabs"></nav>
+    <a class="open-btn" id="openOriginal" href="#" target="_blank" rel="noopener" title="新窗口打开当前站点">&#8599;</a>
+  </header>
+  <div class="stage">
+    <iframe id="frame" title="站点门户"></iframe>
+    <div class="loading" id="loading"><div class="spinner"></div></div>
+  </div>
+<script>
+(function () {
+  var SITES = [
+    { key: 'uk', flag: '\uD83C\uDDEC\uD83C\uDDE7', name: 'UK 英国站', url: 'https://baodan168.github.io/product-radar/' },
+    { key: 'au', flag: '\uD83C\uDDE6\uD83C\uDDFA', name: 'AU 澳洲站', url: 'https://baodan168.github.io/product-radar-au/' },
+    { key: 'fr', flag: '\uD83C\uDDEB\uD83C\uDDF7', name: 'FR 法国站', url: 'https://baodan168.github.io/product-radar-fr/' }
+  ];
+  var STORE_KEY = 'ops-hub-site';
+  var tabsEl = document.getElementById('tabs');
+  var frame = document.getElementById('frame');
+  var loading = document.getElementById('loading');
+  var openOriginal = document.getElementById('openOriginal');
+  var current = null;
+
+  SITES.forEach(function (s) {
+    var btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.type = 'button';
+    btn.dataset.key = s.key;
+    btn.title = s.name;
+    btn.innerHTML = '<span class="flag">' + s.flag + '</span><span class="name">' + s.name + '</span>';
+    btn.addEventListener('click', function () { switchTo(s.key); });
+    tabsEl.appendChild(btn);
+  });
+
+  function byKey(key) {
+    for (var i = 0; i < SITES.length; i++) if (SITES[i].key === key) return SITES[i];
+    return null;
+  }
+
+  function switchTo(key, skipHash) {
+    var site = byKey(key);
+    if (!site || key === current) return;
+    current = key;
+    try { localStorage.setItem(STORE_KEY, key); } catch (e) {}
+    if (!skipHash) {
+      var hash = '#/' + key;
+      if (window.location.hash !== hash) window.location.hash = hash;
+    }
+    document.title = site.name + ' · Amazon 运营总台';
+    openOriginal.href = site.url;
+    openOriginal.title = '新窗口打开 ' + site.name;
+    var tabs = tabsEl.children;
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('active', tabs[i].dataset.key === key);
+    }
+    loading.classList.remove('hidden');
+    frame.src = site.url;
+  }
+
+  frame.addEventListener('load', function () {
+    loading.classList.add('hidden');
+  });
+
+  window.addEventListener('hashchange', function () {
+    var key = (window.location.hash || '').replace(/^#\/?/, '');
+    if (key && key !== current) switchTo(key, true);
+  });
+
+  var fromHash = (window.location.hash || '').replace(/^#\/?/, '');
+  var saved = null;
+  try { saved = localStorage.getItem(STORE_KEY); } catch (e) {}
+  switchTo(byKey(fromHash) ? fromHash : (byKey(saved) ? saved : 'uk'));
+})();
+</script>
+</body>
+</html>
